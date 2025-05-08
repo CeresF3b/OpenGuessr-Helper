@@ -1,45 +1,76 @@
 # OpenGuessr-Helper
 
-## Description
-This userscript enhances the gaming experience on [OpenGuessr](https://openguessr.com/) by adding advanced location and navigation features. The script provides a button to view your current position and an interactive minimap with automatic updates.
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Features
-- **"Show Location" Button**: View your current position on Google Maps with a single click
-- **Interactive Minimap**: Shows your real-time position during gameplay
-- **Multiple Map Styles Support**: Standard, Satellite, Topographic, and Streets
-- **Intuitive Interface**: Ability to minimize/maximize the minimap
-- **Automatic Updates**: The position on the minimap updates automatically
-- **Resource Optimization**: Suspension of updates when the tab is not active
-
-## Installation
-1. Install a userscript manager like [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)
-2. Click on the "Raw" button of this file on GitHub (or copy the JavaScript file content)
-3. Your userscript manager should automatically detect the script and ask to install it
-4. Confirm the installation
-5. Visit [OpenGuessr](https://openguessr.com/) and the script will activate automatically
-
-## Usage
-1. Start a game on OpenGuessr
-2. You'll see a green "🔍 Show Location" button in the top-right corner
-3. Click the button to open your current location on Google Maps
-4. Use the minimap in the top-right corner to view your position
-5. You can change the map style using the buttons at the top of the minimap
-6. Use the "-" button to minimize the map when you're not using it
-
-## Compatibility
-The script has been tested and works with:
-- Chrome, Firefox, Edge with Tampermonkey or Violentmonkey
-- OpenGuessr.com (all game modes)
-
-## License
-This project is distributed under the MIT license.
-
-## Author
-- **CeresF3b**
-
-## Contributing
-If you wish to contribute to this project, feel free to create a pull request or report issues in the Issues section.
+A userscript that enhances the gameplay experience on [OpenGuessr](https://openguessr.com/) by adding a “Show Location” button and an advanced, auto-updating minimap.
 
 ---
 
-*Note: This script was created for educational and recreational purposes. It is not officially affiliated with OpenGuessr.*
+## 📋 Features
+
+- **🔍 “Show Location” Button**  
+  Adds a fixed button in the top-right corner that, with a single click, opens Google Maps at your current coordinates.
+
+- **🗺️ Interactive Minimap**  
+  - Real-time overlay showing your current position.  
+  - Multiple map styles: **Standard**, **Satellite**, **Topographic**.  
+  - Built-in zoom and scale controls.  
+  - Minimize/restore functionality keeps a compact icon when not in use.
+
+- **⏱️ Automatic Updates**  
+  - Position refreshed every 2 seconds.  
+  - Pauses updates when the browser tab is not visible to save resources.
+
+- **🔄 Reliable Initialization**  
+  - Continuously checks the DOM for the panorama iframe or Leaflet container.  
+  - Fallback initialization after 5 seconds if needed.  
+  - MutationObserver recreates button and minimap on page or mode changes.
+
+- **🌐 Reverse Geocoding**  
+  - Fetches and displays the place name via OpenStreetMap/Nominatim beneath the minimap.
+
+---
+
+## ⚙️ Installation
+
+1. Install a userscript manager (e.g. [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)).  
+2. Open the “Raw” view of `OpenGuessr-Helper.user.js` on GitHub or copy the script contents directly.  
+3. Your userscript manager will detect and prompt you to install the script—confirm to proceed.  
+4. Visit [OpenGuessr.com](https://openguessr.com/) and start playing; the script will activate automatically.
+
+---
+
+## 🚀 Usage
+
+1. Start a game on OpenGuessr.  
+2. A green **🔍 Show Location** button appears in the top-right corner.  
+3. Click the button to:  
+   - Open Google Maps in a new tab centered on your coordinates.  
+   - Expand the minimap if it was minimized.  
+4. Under the minimap, view your lat/lng (and, when available, the location name).  
+5. Switch map style via the **Standard**, **Satellite**, or **Topographic** buttons.  
+6. Click **−** to minimize the map into a clickable icon, **+** to restore.
+
+---
+
+## 🧩 Compatibility
+
+- **Browsers**: Chrome, Firefox, Edge  
+- **Userscript Managers**: Tampermonkey, Violentmonkey  
+- **Domain**: `https://openguessr.com/*`
+
+---
+
+## 🤝 Contributing
+
+Contributions, bug reports, and feature requests are welcome! Please open an issue or submit a pull request in the [Issues](https://github.com/your-username/OpenGuessr-Helper/issues) section.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+---
+
+> *Developed by **CeresF3b** for educational and recreational purposes. Not officially affiliated with OpenGuessr.*  
