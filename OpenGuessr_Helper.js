@@ -1,12 +1,12 @@
 // ==UserScript==
-// @name         OpenGuessr-Helper
-// @namespace    https://openguessr.com/
-// @version      1.4
-// @description  Adds a button to show current location and an advanced minimap with automatic updates
-// @author       CeresF3b
-// @match        https://openguessr.com/*
-// @grant        none
-// @license MIT
+// @name          OpenGuessr-Helper
+// @namespace     https://openguessr.com/
+// @version       1.4
+// @description   Adds a button to show current location and an advanced minimap with automatic updates
+// @author        CeresF3b
+// @match         https://openguessr.com/*
+// @grant         none
+// @license       MIT
 // ==/UserScript==
 
 (function() {
@@ -18,7 +18,7 @@
      * 1. Continuous checking for required elements
      * 2. Backup initialization after a timeout
      */
-    
+
     // Wait for the page to load by checking for panorama iframe or leaflet container
     const checkInterval = setInterval(() => {
         if (document.querySelector('#PanoramaIframe') || document.querySelector('.leaflet-container')) {
@@ -27,10 +27,10 @@
             initializeScript();
         }
     }, 1000);
-    
+
     // Backup initialization after 5 seconds if normal detection fails
     setTimeout(() => {
-        if ((document.querySelector('#PanoramaIframe') || document.querySelector('.leaflet-container')) && 
+        if ((document.querySelector('#PanoramaIframe') || document.querySelector('.leaflet-container')) &&
             !document.getElementById('openGuessrLocationButton')) {
             console.log('OpenGuessr Location Enhanced: Backup initialization...');
             initializeScript();
@@ -44,13 +44,13 @@
     function initializeScript() {
         // Create the "Show Location" button in the top-right corner
         createLocationButton();
-        
+
         // Create the interactive minimap with multiple layer options
         createMinimap();
-        
+
         // Set up an observer to monitor DOM changes and recreate elements when necessary
         setupObserver();
-        
+
         // Listen for page visibility changes to manage update interval (save resources when tab is not visible)
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
@@ -120,7 +120,7 @@
             subtree: true,   // Watch for changes in the entire subtree
         });
     }
-    
+
     /**
      * Toggle minimap between normal and minimized states
      * This function handles the minimap's visibility states and animations
@@ -132,7 +132,7 @@
                 // Restore from minimized state to full-size view
                 minimapContainer.classList.remove('minimized');
                 minimapContainer.classList.add('visible');
-                
+
                 // Update button icon to show minimize option
                 const minimizeButton = document.getElementById('minimapToggleButton');
                 if (minimizeButton) {
@@ -143,7 +143,7 @@
                 // Minimize the map to a small circular icon
                 minimapContainer.classList.remove('visible');
                 minimapContainer.classList.add('minimized');
-                
+
                 // Update button icon to show restore option
                 const minimizeButton = document.getElementById('minimapToggleButton');
                 if (minimizeButton) {
@@ -166,25 +166,25 @@
      */
     function showCurrentPosition() {
         console.log('Show Location button clicked');
-        
+
         // Get current position using multiple detection methods
         const currentPosition = getCurrentPosition();
-        
+
         // Alert the user if position cannot be determined
         if (!currentPosition) {
             alert('Unable to determine current position. Make sure a round is active.');
             return;
         }
-        
+
         console.log('Position found:', currentPosition);
-        
+
         // Open Google Maps in a new tab with the current coordinates
         const mapsUrl = `https://www.google.com/maps?q=${currentPosition.lat},${currentPosition.lng}`;
         window.open(mapsUrl, '_blank');
-        
+
         // Update minimap marker position and ensure it's visible on the map
         updateMinimapMarker(currentPosition);
-        
+
         // Show minimap if it's not already visible or restore it if minimized
         const minimapContainer = document.getElementById('minimapContainer');
         if (minimapContainer) {
@@ -192,7 +192,7 @@
                 // Restore from minimized state to full-size view
                 minimapContainer.classList.remove('minimized');
                 minimapContainer.classList.add('visible');
-                
+
                 // Update button icon to show minimize option
                 const minimizeButton = document.getElementById('minimapToggleButton');
                 if (minimizeButton) {
@@ -245,7 +245,7 @@
         } catch (error) {
             console.error('Error searching panorama object:', error);
         }
-        
+
         // Method 3: Look in data-lat and data-lng attributes
         try {
             const gameObjects = document.querySelectorAll('[data-lat], [data-lng]');
@@ -269,7 +269,7 @@
                     lng: parseFloat(urlParams.get('lng'))
                 };
             }
-            
+
             // Also look for location=lat,lng format in URL
             if (urlParams.has('location')) {
                 const location = urlParams.get('location');
@@ -299,17 +299,17 @@
         // No position found
         return null;
     }
-    
+
     // Minimap variables
     let minimapInstance = null;
     let currentMarker = null;
     let positionUpdateInterval = null;
     let lastPosition = null;
-    
+
     // Add CSS styles for animations and minimized state
     function addStyles() {
         if (document.getElementById('openGuessrStyles')) return;
-        
+
         const styleEl = document.createElement('style');
         styleEl.id = 'openGuessrStyles';
         styleEl.textContent = `
@@ -423,18 +423,18 @@
         `;
         document.head.appendChild(styleEl);
     }
-    
+
     function createMinimap() {
         // Check if minimap already exists
         if (document.getElementById('minimapContainer')) return;
-        
+
         // Add animation styles
         addStyles();
-        
+
         // Get button position for alignment
         const button = document.getElementById('openGuessrLocationButton');
         const buttonRect = button ? button.getBoundingClientRect() : null;
-        
+
         // Create minimap container
         const minimapContainer = document.createElement('div');
         minimapContainer.id = 'minimapContainer';
@@ -449,7 +449,7 @@
         minimapContainer.style.overflow = 'hidden';
         minimapContainer.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
         minimapContainer.style.display = 'block'; // Initially visible
-        
+
         // Add minimize/restore button with tooltip
         const minimizeButton = document.createElement('div');
         minimizeButton.innerHTML = '−'; // Minus sign for minimize
@@ -457,27 +457,27 @@
         minimizeButton.title = 'Minimize map'; // English translation
         minimizeButton.onclick = toggleMinimap;
         minimapContainer.appendChild(minimizeButton);
-        
+
         // Create info panel to display location details
         const infoPanel = document.createElement('div');
         infoPanel.id = 'minimapInfo';
         infoPanel.innerHTML = 'Loading information...'; // English translation
         minimapContainer.appendChild(infoPanel);
-        
+
         // Create layer control panel
         const layerControl = document.createElement('div');
         layerControl.id = 'minimapLayerControl';
         minimapContainer.appendChild(layerControl);
-        
+
         document.body.appendChild(minimapContainer);
-        
+
         // Create minimap content div
         const minimapContent = document.createElement('div');
         minimapContent.id = 'minimapContent';
         minimapContent.style.width = '100%';
         minimapContent.style.height = '100%';
         minimapContainer.appendChild(minimapContent);
-        
+
         // Load Leaflet if not already loaded
         if (!window.L) {
             console.log('Leaflet not found, loading...');
@@ -499,7 +499,7 @@
                 console.log('Minimap made visible (Leaflet already loaded)');
             }, 100);
         }
-        
+
         // Force minimap visibility after a short delay
         setTimeout(() => {
             if (minimapContainer && !minimapContainer.classList.contains('visible')) {
@@ -509,24 +509,24 @@
             }
         }, 1000);
     }
-    
+
     /**
      * Load Leaflet library dynamically
      * @param {Function} callback - Function to call after Leaflet is loaded
      */
     function loadLeaflet(callback) {
         console.log('Loading Leaflet...');
-        
+
         // Load Leaflet CSS from CDN
         const leafletCSS = document.createElement('link');
         leafletCSS.rel = 'stylesheet';
         leafletCSS.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
         document.head.appendChild(leafletCSS);
-        
+
         // Load Leaflet JavaScript from CDN
         const leafletScript = document.createElement('script');
         leafletScript.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        
+
         // Handle successful loading
         leafletScript.onload = function() {
             console.log('Leaflet loaded successfully');
@@ -536,15 +536,15 @@
             }
             callback(); // Execute callback when loaded
         };
-        
+
         // Handle loading errors
         leafletScript.onerror = function() {
             console.error('Error loading Leaflet');
         };
-        
+
         document.head.appendChild(leafletScript);
     }
-    
+
     function initializeLeafletMap() {
         console.log('Initializing minimap with Leaflet...');
         try {
@@ -555,7 +555,7 @@
                 dragging: true,
                 scrollWheelZoom: true
             }).setView([0, 0], 2);
-            
+
             // Define multiple tile layers for different map styles
             const layers = {
                 // Map layer options with different visualization styles
@@ -567,21 +567,18 @@
                     maxZoom: 19,
                     attribution: '© Esri'
                 }),
-                'Topographic': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { // English translation
+                'Topographic': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
                     maxZoom: 17,
                     attribution: '© OpenTopoMap contributors'
-                }),
-                'Roads': L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { // English translation
-                    maxZoom: 19,
-                    attribution: '© CARTO'
                 })
+                // 'Roads' layer removed
             };
-            
+
             // Add the default layer to the map
             layers['Standard'].addTo(minimapInstance);
-            
+
             // Create layer control buttons
-            const layerControl = document.getElementById('minimapLayerControl');
+            const layerControlContainer = document.getElementById('minimapLayerControl'); // Renamed to avoid conflict with layers variable
             Object.keys(layers).forEach(layerName => {
                 const button = document.createElement('button');
                 button.className = 'map-layer-button' + (layerName === 'Standard' ? ' active' : '');
@@ -601,20 +598,20 @@
                     });
                     button.classList.add('active');
                 };
-                layerControl.appendChild(button);
+                layerControlContainer.appendChild(button); // Use the renamed container variable
             });
-            
+
             // Add zoom controls
             L.control.zoom({
                 position: 'topright'
             }).addTo(minimapInstance);
-            
+
             // Add scale control
             L.control.scale({
                 imperial: false,
                 position: 'bottomright'
             }).addTo(minimapInstance);
-            
+
             // Try to get current position and update marker
             const position = getCurrentPosition();
             if (position) {
@@ -624,22 +621,22 @@
             } else {
                 console.log('No position found for minimap');
             }
-            
+
             // Make sure the minimap is visible
             const minimapContainer = document.getElementById('minimapContainer');
             if (minimapContainer) {
                 minimapContainer.classList.add('visible');
             }
-            
+
             // Start position update interval
             startPositionUpdateInterval();
-            
+
             console.log('Minimap initialized successfully');
         } catch (error) {
             console.error('Error initializing minimap:', error);
         }
     }
-    
+
     function updateMinimapMarker(position) {
         // If minimap doesn't exist yet, create it
         if (!minimapInstance && window.L) {
@@ -648,22 +645,22 @@
             createMinimap();
             return; // Will be called again after minimap is created
         }
-        
+
         // Skip update if position hasn't changed
-        if (lastPosition && 
-            lastPosition.lat === position.lat && 
+        if (lastPosition &&
+            lastPosition.lat === position.lat &&
             lastPosition.lng === position.lng) {
             return;
         }
-        
+
         // Update last position
         lastPosition = position;
-        
+
         // Remove existing marker if any
         if (currentMarker) {
             minimapInstance.removeLayer(currentMarker);
         }
-        
+
         // Create custom icon for better visibility
         const customIcon = L.divIcon({
             className: 'custom-map-marker',
@@ -671,49 +668,49 @@
             iconSize: [18, 18],
             iconAnchor: [9, 9]
         });
-        
+
         // Create new marker with custom icon
         currentMarker = L.marker([position.lat, position.lng], {
             icon: customIcon
         }).addTo(minimapInstance);
-        
+
         // Add popup with coordinates and additional info
         currentMarker.bindPopup(`
-            <b>La tua posizione</b><br>
+            <b>Your Location</b><br>
             Lat: ${position.lat.toFixed(6)}<br>
             Lng: ${position.lng.toFixed(6)}<br>
         `);
-        
+
         // Center map on marker with appropriate zoom level
         minimapInstance.setView([position.lat, position.lng], 12);
-        
+
         // Update info panel with reverse geocoding if available
         updateLocationInfo(position);
-        
+
         // Open popup
         currentMarker.openPopup();
     }
-    
+
     // Function to update location information
     function updateLocationInfo(position) {
         const infoPanel = document.getElementById('minimapInfo');
         if (!infoPanel) return;
-        
+
         // Update basic coordinates
-        infoPanel.innerHTML = `<b>Posizione:</b> ${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`;
-        
+        infoPanel.innerHTML = `<b>Location:</b> ${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}`;
+
         // Try to get location name using Nominatim reverse geocoding
         try {
             const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18&addressdetails=1`;
-            
+
             // Create a unique callback name
             const callbackName = 'geocodeCallback_' + Math.floor(Math.random() * 1000000);
-            
+
             // Add the callback function to window
             window[callbackName] = function(data) {
                 if (data && data.display_name) {
                     let locationInfo = data.display_name;
-                    
+
                     // Extract country and region for more concise display
                     if (data.address) {
                         const parts = [];
@@ -725,40 +722,49 @@
                             parts.push(data.address.state || data.address.region);
                         }
                         if (data.address.country) parts.push(data.address.country);
-                        
+
                         if (parts.length > 0) {
                             locationInfo = parts.join(', ');
                         }
                     }
-                    
-                    infoPanel.innerHTML = `<b>Posizione:</b> ${locationInfo}<br><small>${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}</small>`;
+
+                    infoPanel.innerHTML = `<b>Location:</b> ${locationInfo}<br><small>${position.lat.toFixed(6)}, ${position.lng.toFixed(6)}</small>`;
                 }
-                
+
                 // Clean up the callback
                 delete window[callbackName];
             };
-            
+
             // Create script element for JSONP request
             const script = document.createElement('script');
             script.src = `${nominatimUrl}&json_callback=${callbackName}`;
             document.head.appendChild(script);
-            
+
             // Remove the script element after execution
             script.onload = function() {
-                document.head.removeChild(script);
+                if (script.parentNode) { // Check if the script is still in the DOM
+                    script.parentNode.removeChild(script);
+                }
             };
+            script.onerror = function() { // Also handle cases where the script might fail to load
+                if (script.parentNode) {
+                    script.parentNode.removeChild(script);
+                }
+                delete window[callbackName]; // Clean up callback in case of error too
+            };
+
         } catch (error) {
             console.error('Error getting location info:', error);
         }
     }
-    
+
     // Function to start position update interval
     function startPositionUpdateInterval() {
         // Clear any existing interval
         if (positionUpdateInterval) {
             clearInterval(positionUpdateInterval);
         }
-        
+
         // Set up interval to check for position changes
         positionUpdateInterval = setInterval(() => {
             const position = getCurrentPosition();
@@ -767,12 +773,13 @@
             }
         }, 2000); // Check every 2 seconds
     }
-    
+
     // Function to stop position update interval
     function stopPositionUpdateInterval() {
         if (positionUpdateInterval) {
             clearInterval(positionUpdateInterval);
-            positionUpdateInterval = null;
+            positionUpdateInterval = null; // Reset the interval ID
         }
     }
+
 })();
