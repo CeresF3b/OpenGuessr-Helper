@@ -1,4 +1,4 @@
-# OpenGuessr Location Enhanced with Minimap Pro
+# OpenGuessr-Helper
 
 ## Description
 This userscript enhances the gaming experience on [OpenGuessr](https://openguessr.com/) by adding advanced location and navigation features. The script provides a button to view your current position and an interactive minimap with automatic updates.
