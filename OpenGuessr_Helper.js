@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         OpenGuessr Location Enhanced with Minimap Pro
+// @name         Owner avatar OpenGuessr-Helper
 // @namespace    https://openguessr.com/
 // @version      1.4
 // @description  Adds a button to show current location and an advanced minimap with automatic updates
