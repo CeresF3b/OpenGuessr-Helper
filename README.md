@@ -73,7 +73,7 @@ This project is licensed under the GPL-3.0 License. See the [LICENSE](LICENSE) f
 
 ---
 
-> for educational and recreational purposes. Not officially affiliated with OpenGuessr.*
+> for educational and recreational purposes. Not officially affiliated with OpenGuessr.
 
 ## Acknowledgments
 Created with ❤️ by CeresF3B
