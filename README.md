@@ -1,6 +1,6 @@
 # OpenGuessr-Helper
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-green.svg)](LICENSE)
 
 A userscript that enhances the gameplay experience on [OpenGuessr](https://openguessr.com/) by adding a “Show Location” button and an advanced, auto-updating minimap.
 
@@ -69,8 +69,8 @@ Contributions, bug reports, and feature requests are welcome! Please open an iss
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the GPL-3.0 License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
-> *Developed by **CeresF3b** for educational and recreational purposes. Not officially affiliated with OpenGuessr.*  
+> *Developed by **CeresF3b** for educational and recreational purposes. Not officially affiliated with OpenGuessr.*
