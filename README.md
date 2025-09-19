@@ -1,77 +1,37 @@
-# OpenGuessr-Helper
+# 🌍 OpenGuessr Helper
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-green.svg)](LICENSE)
 
-A userscript that enhances the gameplay experience on [OpenGuessr](https://openguessr.com/) by adding a “Show Location” button and an advanced, auto-updating minimap.
+## 🔎 Overview
+OpenGuessr Helper is a userscript designed to enhance the OpenGuessr experience by providing a robust minimap with real-time location tracking, multiple map layers, and a custom DivIcon marker. The script also includes self-recreating UI elements to ensure functionality even if elements are removed from the DOM.
 
----
+## 🔥 Features
+- **Minimap**: Displays the current location with a draggable and zoomable map.
+- **Custom Marker**: Uses a CSS-based DivIcon for precise and visually appealing markers.
+- **Layer Control**: Switch between Standard, Satellite, and Topographic map layers.
+- **Real-Time Updates**: Tracks and updates the user's location every 2 seconds.
+- **Place Information**: Fetches and displays the name of the current location using OpenStreetMap's reverse geocoding API.
+- **Self-Recreating UI**: Automatically restores the minimap and location button if removed.
 
-## 📋 Features
+## 🤔 How It Works
+1. **Initialization**: The script waits for the PanoramaIframe element to appear on the page before initializing the minimap and location button.
+2. **Minimap Creation**: A Leaflet map is embedded into the page, with controls for switching map layers and displaying location information.
+3. **Location Tracking**: The script extracts the user's latitude and longitude from the PanoramaIframe URL and updates the minimap marker and view.
+4. **Reverse Geocoding**: The script fetches location details from OpenStreetMap's API and displays them in the minimap's info panel.
+5. **UI Restoration**: A MutationObserver ensures that the minimap and location button are recreated if removed.
 
-- **🔍 “Show Location” Button**  
-  Adds a fixed button in the top-right corner that, with a single click, opens Google Maps at your current coordinates.
+## ⚒️ Installation
+1. Install a userscript manager like [Tampermonkey](https://www.tampermonkey.net/) or [Greasemonkey](https://www.greasespot.net/).
+2. Create a new userscript and paste the code from `OpenGuessr_Helper.js`.
+3. Save and enable the script.
 
-- **🗺️ Interactive Minimap**  
-  - Real-time overlay showing your current position.  
-  - Multiple map styles: **Standard**, **Satellite**, **Topographic**.  
-  - Built-in zoom and scale controls.  
-  - Minimize/restore functionality keeps a compact icon when not in use.
-
-- **⏱️ Automatic Updates**  
-  - Position refreshed every 2 seconds.  
-  - Pauses updates when the browser tab is not visible to save resources.
-
-- **🔄 Reliable Initialization**  
-  - Continuously checks the DOM for the panorama iframe or Leaflet container.  
-  - Fallback initialization after 5 seconds if needed.  
-  - MutationObserver recreates button and minimap on page or mode changes.
-
-- **🌐 Reverse Geocoding**  
-  - Fetches and displays the place name via OpenStreetMap/Nominatim beneath the minimap.
-
----
-
-## ⚙️ Installation
-
-1. Install a userscript manager (e.g. [Tampermonkey](https://www.tampermonkey.net/) or [Violentmonkey](https://violentmonkey.github.io/)).  
-2. Open the “Raw” view of `OpenGuessr-Helper.user.js` on GitHub or copy the script contents directly.  
-3. Your userscript manager will detect and prompt you to install the script—confirm to proceed.  
-4. Visit [OpenGuessr.com](https://openguessr.com/) and start playing; the script will activate automatically.
-
----
-
-## 🚀 Usage
-
-1. Start a game on OpenGuessr.  
-2. A green **🔍 Show Location** button appears in the top-right corner.  
-3. Click the button to:  
-   - Open Google Maps in a new tab centered on your coordinates.  
-   - Expand the minimap if it was minimized.  
-4. Under the minimap, view your lat/lng (and, when available, the location name).  
-5. Switch map style via the **Standard**, **Satellite**, or **Topographic** buttons.  
-6. Click **−** to minimize the map into a clickable icon, **+** to restore.
-
----
-
-## 🧩 Compatibility
-
-- **Browsers**: Chrome, Firefox, Edge  
-- **Userscript Managers**: Tampermonkey, Violentmonkey  
-- **Domain**: `https://openguessr.com/*`
-
----
-
-## 🤝 Contributing
-
-Contributions, bug reports, and feature requests are welcome! Please open an issue or submit a pull request in the [Issues](https://github.com/your-username/OpenGuessr-Helper/issues) section.
-
----
+## 😎 Usage
+- Click the 📍 button to toggle the minimap.
+- Drag the 📍 button to reposition the minimap.
+- Use the layer control buttons to switch between map layers.
 
 ## 📄 License
-
-This project is licensed under the GPL-3.0 License. See the [LICENSE](LICENSE) file for details.
-
----
+This project is licensed under the MIT License.
 
 > for educational and recreational purposes. Not officially affiliated with OpenGuessr.
 
