@@ -26,8 +26,8 @@ OpenGuessr Helper is a userscript designed to enhance the OpenGuessr experience 
 3. Save and enable the script.
 
 ## 😎 Usage
-- Click the 📍 button to toggle the minimap.
-- Drag the 📍 button to reposition the minimap.
+- Click the 🗺️ button to toggle the minimap.
+- Drag the 🗺️ button to reposition the minimap.
 - Use the layer control buttons to switch between map layers.
 
 ## 📄 License
