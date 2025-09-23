@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         OpenGuessr-Helper
 // @namespace    https://openguessr.com/
-// @version      1.5
+// @version      1.6
 // @description  A robust minimap for OpenGuessr featuring a custom DivIcon marker, world wrap functionality, and self-recreating UI elements. It provides real-time location tracking and multiple map layers.
 // @author       CeresF3b
 // @match        https://openguessr.com/*
@@ -12,25 +12,155 @@
 (function() {
     'use strict';
 
-    let minimapInstance = null;
-    let currentMarker = null;
-    let positionUpdateInterval = null;
-    let lastPosition = null;
-    let userInteracting = false;
-    let isInitialized = false;
+    // Global variables to manage the minimap state and elements
+    let minimapInstance = null; // Stores the Leaflet map instance
+    let currentMarker = null;   // Stores the current position marker on the map
+    let positionUpdateInterval = null; // Interval for periodically updating the player's position
+    let lastPosition = null;    // Stores the last known position
+    let userInteracting = false; // Flag to check if the user is currently interacting with the map (dragging, zooming)
+    let isInitialized = false;  // Flag to ensure the script initializes only once
 
     // The custom marker icon will be defined after Leaflet is loaded.
     let customMarkerIcon = null;
 
+    // Injects CSS styles into the document head to style the minimap and its controls
+    function injectStyles() {
+        const style = document.createElement('style');
+        style.textContent = `
+            :root {
+                --primary-color: #007bff;
+                --light-bg: #ffffff;
+                --dark-bg: #252525;
+                --light-text: #212529;
+                --dark-text: #f8f9fa;
+                --light-border: #dee2e6;
+                --dark-border: #495057;
+                --shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            }
+            [data-theme="dark"] {
+                --primary-color: #00A86B;
+                --light-bg: #2c2c2c;
+                --dark-bg: #1a1a1a;
+                --light-text: #f8f9fa;
+                --dark-text: #f8f9fa;
+                --light-border: #495057;
+                --dark-border: #6c757d;
+            }
+            #mapWrapper {
+                position: fixed;
+                top: 90px;
+                left: 20px;
+                z-index: 10000;
+                width: 420px;
+                height: 340px;
+                border-radius: 12px;
+                background: var(--light-bg);
+                box-shadow: var(--shadow);
+                display: none;
+                opacity: 0;
+                transform: scale(0.95);
+                transition: opacity 0.3s ease, transform 0.3s ease;
+                overflow: hidden;
+            }
+            #mapWrapper.visible {
+                display: block;
+                opacity: 1;
+                transform: scale(1);
+            }
+            #minimapContent {
+                width: 100%;
+                height: 100%;
+                border-radius: 12px;
+            }
+            #minimapInfo {
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                padding: 8px 12px;
+                background: rgba(0, 0, 0, 0.7);
+                color: var(--dark-text);
+                font-size: 13px;
+                white-space: nowrap;
+                text-align: center;
+                z-index: 1001;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                border-bottom-left-radius: 12px;
+                border-bottom-right-radius: 12px;
+            }
+            #minimapLayerControl {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                z-index: 1001;
+                display: flex;
+                gap: 5px;
+            }
+            .layer-btn {
+                background: var(--light-bg);
+                color: var(--light-text);
+                border: 1px solid var(--light-border);
+                border-radius: 5px;
+                padding: 5px 10px;
+                cursor: pointer;
+                font-size: 12px;
+                transition: background-color 0.2s, color 0.2s;
+            }
+            .layer-btn.active, .layer-btn:hover {
+                background: var(--primary-color);
+                color: white;
+                border-color: var(--primary-color);
+            }
+            #buttonWrapper {
+                position: fixed;
+                top: 80px;
+                left: 20px;
+                z-index: 10001;
+                transition: transform 0.3s ease;
+            }
+            #locationButton {
+                width: 50px;
+                height: 50px;
+                background: var(--primary-color);
+                color: white;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                box-shadow: var(--shadow);
+                font-size: 24px;
+                transition: background-color 0.3s, transform 0.2s ease;
+            }
+            #locationButton:hover {
+                transform: scale(1.1);
+            }
+            .custom-map-marker div {
+                background-color: var(--primary-color) !important;
+                width: 16px !important;
+                height: 16px !important;
+                border-radius: 50% !important;
+                border: 2px solid white !important;
+                box-shadow: 0 0 5px rgba(0,0,0,0.6) !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // Checks if the dark theme is currently active based on the body's data-theme attribute
     function isDarkTheme() {
-        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        return document.body.getAttribute('data-theme') === 'dark';
     }
 
-    function getControlButtonStyle() {
-        const dark = isDarkTheme();
-        return `background:${dark?'#333':'#fff'};color:${dark?'#fff':'#000'};border:1px solid ${dark?'#555':'#ccc'};border-radius:3px;padding:3px 6px;margin:2px;cursor:pointer;font-size:12px;`;
+    // Applies the theme (light/dark) based on the user's system preferences
+    function applyTheme() {
+        const useDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.body.setAttribute('data-theme', useDark ? 'dark' : 'light');
     }
 
+    // Dynamically loads the Leaflet.js library and its CSS
+    // Calls a callback function once Leaflet is loaded and ready
     async function loadLeaflet(callback) {
         if (window.L) {
             callback();
@@ -46,8 +176,11 @@
         document.head.appendChild(script);
     }
 
+    // Module to get the current geographical position from the game's iframe
     const PositionModule = (function() {
-        let lastPos = null;
+        let lastPos = null; // Stores the last retrieved position within this module
+
+        // Extracts latitude and longitude from the PanoramaIframe's URL
         function _getCurrentPosition() {
             try {
                 const iframe = document.querySelector('#PanoramaIframe');
@@ -63,98 +196,115 @@
             return null;
         }
         return {
+            // Public method to get the current position, updates lastPos
             getCurrentPosition: function() { const p = _getCurrentPosition(); if (p) lastPos = p; return p; },
+            // Public method to retrieve the last known position
             getLastPosition: function() { return lastPos; }
         };
     })();
 
+    // Wrapper function to get the current position using the PositionModule
     function getCurrentPosition() { return PositionModule.getCurrentPosition(); }
 
+    // Creates the main minimap container and its sub-elements (map content, info panel, layer control)
     function createMinimap() {
         if (document.getElementById('mapWrapper')) return;
         const wrapper = document.createElement('div');
         wrapper.id = 'mapWrapper';
-        Object.assign(wrapper.style, { position: 'fixed', top: '80px', left: '20px', zIndex: '9999', width: '400px', height: '320px', border: '2px solid #2c7', borderRadius: '5px', background: 'rgba(255,255,255,0.9)', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', display: 'none', transition: 'opacity 0.3s, transform 0.3s' });
         document.body.appendChild(wrapper);
 
         const mapContent = document.createElement('div');
         mapContent.id = 'minimapContent';
-        mapContent.style.cssText = 'width:100%; height:100%;';
         wrapper.appendChild(mapContent);
 
         const infoPanel = document.createElement('div');
         infoPanel.id = 'minimapInfo';
-        Object.assign(infoPanel.style, { position: 'absolute', bottom: '0', left: '0', right: '0', padding: '5px 10px', background: 'rgba(0,0,0,0.8)', color: '#fff', fontSize: '12px', whiteSpace: 'nowrap', textAlign: 'center', zIndex: '1000', overflow: 'hidden', textOverflow: 'ellipsis' });
         wrapper.appendChild(infoPanel);
 
         const layerControl = document.createElement('div');
         layerControl.id = 'minimapLayerControl';
-        Object.assign(layerControl.style, { position: 'absolute', top: '5px', left: '5px', zIndex: '1000' });
         wrapper.appendChild(layerControl);
 
         loadLeaflet(() => initializeLeafletMap());
     }
 
+    // Initializes the Leaflet map, sets up layers, and event listeners
     function initializeLeafletMap() {
         if (minimapInstance) return;
 
-        // --- FIX: Using your custom divIcon for a reliable, CSS-based marker ---
+        // Defines a custom marker icon using a DivIcon for better styling control
         customMarkerIcon = L.divIcon({
             className: 'custom-map-marker',
-            html: `<div style="background-color: #2c7; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5);"></div>`,
+            html: `<div></div>`,
             iconSize: [18, 18],
             iconAnchor: [9, 9]
         });
 
-        minimapInstance = L.map('minimapContent', { attributionControl: false, zoomControl: false, dragging: true, scrollWheelZoom: true, worldCopyJump: false, maxBoundsViscosity: 1.0 }).setView([0, 0], 2);
+        // Initializes the Leaflet map with specific options and sets the initial view
+        minimapInstance = L.map('minimapContent', { attributionControl: false, zoomControl: false, dragging: true, scrollWheelZoom: true, worldCopyJump: true, maxBoundsViscosity: 1.0 }).setView([0, 0], 2);
 
+        // Event listeners to detect user interaction (dragging, zooming) with the map
         minimapInstance.on('mousedown', () => userInteracting = true);
         minimapInstance.on('mouseup', () => setTimeout(() => userInteracting = false, 100));
         minimapInstance.on('zoomstart', () => userInteracting = true);
         minimapInstance.on('zoomend', () => setTimeout(() => userInteracting = false, 100));
 
+        // Defines different tile layers (Standard, Satellite, Topographic) for the minimap
         const layers = {
             'Standard': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors', noWrap: false }),
             'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '© Esri', noWrap: false }),
             'Topographic': L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenTopoMap contributors', noWrap: false })
         };
+        // Adds the default 'Standard' layer to the map
         layers['Standard'].addTo(minimapInstance);
 
+        // Creates buttons for switching between different map layers
         const layerControl = document.getElementById('minimapLayerControl');
         Object.keys(layers).forEach(name => {
             const btn = document.createElement('button');
             btn.textContent = name;
-            btn.style.cssText = getControlButtonStyle();
-            if (name === 'Standard') { Object.assign(btn.style, { background: '#2c7', color: '#fff' }); }
+            btn.className = 'layer-btn';
+            if (name === 'Standard') {
+                btn.classList.add('active');
+            }
             btn.onclick = () => {
+                // Removes all existing layers and adds the selected one
                 Object.values(layers).forEach(l => { if (minimapInstance.hasLayer(l)) minimapInstance.removeLayer(l); });
                 layers[name].addTo(minimapInstance);
-                Array.from(layerControl.children).forEach(b => { b.style.cssText = getControlButtonStyle(); });
-                Object.assign(btn.style, { background: '#2c7', color: '#fff' });
+                // Updates active state of layer buttons
+                Array.from(layerControl.children).forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
             };
             layerControl.appendChild(btn);
         });
 
+        // Gets the initial position and updates the minimap
         const pos = getCurrentPosition();
         if (pos) updateMinimap(pos, true);
+        // Starts the interval for continuous position updates
         startPositionUpdateInterval();
     }
 
+    // Updates the marker position on the minimap and optionally centers the view
     function updateMinimap(position, setView = false) {
         if (!minimapInstance) return;
         lastPosition = position;
         if (currentMarker) {
+            // Moves existing marker to new position
             currentMarker.setLatLng([position.lat, position.lng]);
         } else {
-            // The script will now use the correct customMarkerIcon defined above
+            // Creates a new marker if one doesn't exist
             currentMarker = L.marker([position.lat, position.lng], { icon: customMarkerIcon }).addTo(minimapInstance);
         }
+        // Centers the map view on the marker if setView is true and user is not interacting
         if (setView && !userInteracting) {
-            minimapInstance.setView([position.lat, position.lng], 12);
+            minimapInstance.setView([position.lat, position.lng], minimapInstance.getZoom() || 12);
         }
+        // Updates the information panel with new position details
         updateInfoPanel(position);
     }
 
+    // Fetches and displays location name based on coordinates using OpenStreetMap Nominatim API
     async function updateInfoPanel(position) {
         const info = document.getElementById('minimapInfo');
         if (!info) return;
@@ -173,30 +323,32 @@
         info.innerHTML = `Lat: ${position.lat.toFixed(6)} | Lng: ${position.lng.toFixed(6)} | Place: ${placeName}`;
     }
 
+    // Starts a recurring interval to check and update the player's position on the minimap
     function startPositionUpdateInterval() {
-        if (positionUpdateInterval) clearInterval(positionUpdateInterval);
+        if (positionUpdateInterval) clearInterval(positionUpdateInterval); // Clears any existing interval
         positionUpdateInterval = setInterval(() => {
             const pos = getCurrentPosition();
+            // Updates minimap if position has changed
             if (pos && (!lastPosition || pos.lat !== lastPosition.lat || pos.lng !== lastPosition.lng)) {
-                updateMinimap(pos, false);
+                updateMinimap(pos, true);
             }
-        }, 2000);
+        }, 2000); // Checks every 2 seconds
     }
 
+    // Creates a draggable button that toggles the visibility of the minimap
     function createLocationButton() {
         if (document.getElementById('buttonWrapper')) return;
         const wrapper = document.createElement('div');
         wrapper.id = 'buttonWrapper';
-        Object.assign(wrapper.style, { position: 'fixed', top: '80px', left: '20px', zIndex: '10000' });
         document.body.appendChild(wrapper);
 
         const btn = document.createElement('div');
         btn.id = 'locationButton';
-        btn.textContent = '📍';
-        Object.assign(btn.style, { width: '40px', height: '40px', background: 'rgba(44,119,77,0.8)', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', fontSize: '20px' });
+        btn.textContent = '🗺️'; // Map emoji icon
         wrapper.appendChild(btn);
 
         let startX, startY, isDragging = false, dragThreshold = 5;
+        // Event listener for dragging the button
         btn.addEventListener('mousedown', e => {
             startX = e.clientX;
             startY = e.clientY;
@@ -205,7 +357,11 @@
                 if (startX === null) return;
                 const dx = e_move.clientX - startX;
                 const dy = e_move.clientY - startY;
-                if (!isDragging && (Math.abs(dx) + Math.abs(dy) > dragThreshold)) isDragging = true;
+                // Determines if dragging has started
+                if (!isDragging && (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold)) {
+                    isDragging = true;
+                }
+                // Updates button and map wrapper position if dragging
                 if (isDragging) {
                     wrapper.style.left = `${wrapper.offsetLeft + dx}px`;
                     wrapper.style.top = `${wrapper.offsetTop + dy}px`;
@@ -214,20 +370,20 @@
                     const map = document.getElementById('mapWrapper');
                     if (map) {
                         map.style.left = `${wrapper.offsetLeft}px`;
-                        map.style.top = `${wrapper.offsetTop + 50}px`;
+                        map.style.top = `${wrapper.offsetTop + 60}px`; // Positions map relative to button
                     }
                 }
             };
             const upHandler = () => {
                 document.removeEventListener('mousemove', moveHandler);
                 document.removeEventListener('mouseup', upHandler);
+                // If not dragging, toggle minimap visibility
                 if (!isDragging) {
                     const map = document.getElementById('mapWrapper');
                     if (map) {
-                        if (map.style.display === 'block') {
-                            map.style.display = 'none';
-                        } else {
-                            map.style.display = 'block';
+                        map.classList.toggle('visible'); // Toggles 'visible' class for CSS transitions
+                        if (map.classList.contains('visible')) {
+                            // Invalidates map size and centers view if minimap becomes visible
                             if (minimapInstance) {
                                 minimapInstance.invalidateSize();
                                 if (!userInteracting && lastPosition) {
@@ -245,37 +401,49 @@
         });
     }
 
+    // Main initialization function, called once the PanoramaIframe is detected
     function init() {
         if (isInitialized) return;
         isInitialized = true;
         console.log('OpenGuessr Helper: Initializing script...');
-        createLocationButton();
-        createMinimap();
-        setupObserver();
+        applyTheme();          // Applies initial theme
+        injectStyles();        // Injects CSS styles
+        createLocationButton(); // Creates the minimap toggle button
+        createMinimap();       // Creates and initializes the minimap
+        setupObserver();       // Sets up mutation observer for UI elements
+        // Observes body for data-theme changes to reapply styles
+        new MutationObserver(() => applyTheme()).observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
     }
 
+    // Sets up a MutationObserver to detect if the minimap or button are removed from the DOM
+    // If removed, it recreates them to ensure persistence
     function setupObserver() {
         const observer = new MutationObserver(() => {
             const panoramaExists = document.querySelector('#PanoramaIframe');
             if (panoramaExists) {
+                // Recreate button if it's missing
                 if (!document.getElementById('buttonWrapper')) {
                     console.log('OpenGuessr Helper: Button removed, recreating...');
                     createLocationButton();
                 }
+                // Recreate minimap if it's missing
                 if (!document.getElementById('mapWrapper')) {
                     console.log('OpenGuessr Helper: Map removed, recreating...');
                     createMinimap();
                 }
             }
         });
+        // Observes the entire body for childList and subtree changes
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
+    // Periodically checks for the existence of the #PanoramaIframe
+    // Once found, it clears the interval and calls the main initialization function
     const checkInterval = setInterval(() => {
         if (document.querySelector('#PanoramaIframe')) {
-            clearInterval(checkInterval);
-            init();
+            clearInterval(checkInterval); // Stops checking once iframe is found
+            init(); // Initializes the script
         }
-    }, 500);
+    }, 500); // Checks every 500 milliseconds
 
 })();
