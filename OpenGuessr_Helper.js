@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         OpenGuessr-Helper
 // @namespace    https://openguessr.com/
-// @version      1.6
-// @description  A robust minimap for OpenGuessr featuring a custom DivIcon marker, world wrap functionality, and self-recreating UI elements. It provides real-time location tracking and multiple map layers.
+// @version      1.7
+// @description  A robust minimap for OpenGuessr featuring a custom DivIcon marker, world wrap functionality, and self-recreating UI elements. Includes dynamic iframe detection, status feedback, debounced place name requests, concise location display, improved readability, title bar, location caching, minimap view persistence, and advanced error handling.
 // @author       CeresF3b
 // @match        https://openguessr.com/*
 // @grant        none
@@ -12,6 +12,11 @@
 (function() {
     'use strict';
 
+    // --- COSTANTS FOR CONFIGURATION ---
+    const DISTANCE_THRESHOLD_METERS = 100; // Threshold for reusing cached location name
+    const NOMINATIM_ERROR_THRESHOLD = 3; // Number of consecutive errors before showing unavailable message
+    const NOMINATIM_ERROR_RESET_TIMEOUT = 30000; // Reset error count after 30 seconds of success
+
     // Global variables to manage the minimap state and elements
     let minimapInstance = null; // Stores the Leaflet map instance
     let currentMarker = null;   // Stores the current position marker on the map
@@ -19,9 +24,80 @@
     let lastPosition = null;    // Stores the last known position
     let userInteracting = false; // Flag to check if the user is currently interacting with the map (dragging, zooming)
     let isInitialized = false;  // Flag to ensure the script initializes only once
+    let lastValidPlaceName = 'Unknown'; // Stores the last successfully fetched place name
+    let positionStatusTimeout = null; // Timeout ID for resetting the connection status indicator
+    let nominatimDebounceTimeout = null; // Timeout ID for debouncing the Nominatim request
+    let nominatimErrorCount = 0; // Counter for consecutive Nominatim errors
+    let nominatimErrorResetTimeout = null; // Timeout ID for resetting the error counter
+
+    // --- CACHE FOR LOCATION NAMES ---
+    // Simple object to hold cached data: { lat: ..., lng: ..., name: ..., timestamp: ... }
+    let locationCache = {};
 
     // The custom marker icon will be defined after Leaflet is loaded.
     let customMarkerIcon = null;
+
+    // Function to dynamically find the Street View iframe based on its src
+    function findStreetViewIframe() {
+        // Find all iframes on the page
+        const iframes = document.querySelectorAll('iframe');
+        // Filter for ones containing 'streetview' in the 'src' attribute
+        for (let iframe of iframes) {
+            if (iframe.src && iframe.src.includes('google.com/maps/embed/v1/streetview')) {
+                return iframe; // Return the first iframe matching the condition
+            }
+        }
+        return null; // Return null if none is found
+    }
+
+    // Calculates the distance between two points in meters using the Haversine formula
+    function calculateDistance(lat1, lng1, lat2, lng2) {
+        const R = 6371e3; // Earth's radius in meters
+        const φ1 = lat1 * Math.PI/180;
+        const φ2 = lat2 * Math.PI/180;
+        const Δφ = (lat2-lat1) * Math.PI/180;
+        const Δλ = (lng2-lng1) * Math.PI/180;
+
+        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+        return R * c; // Distance in meters
+    }
+
+    // Checks if a cached location is close enough to the new position to reuse its name
+    function isCachedLocationValid(newLat, newLng, cachedLat, cachedLng) {
+        const distance = calculateDistance(newLat, newLng, cachedLat, cachedLng);
+        return distance < DISTANCE_THRESHOLD_METERS;
+    }
+
+    // Saves the current map view (center and zoom) to localStorage
+    function saveMapView() {
+        if (minimapInstance) {
+            const center = minimapInstance.getCenter();
+            const zoom = minimapInstance.getZoom();
+            localStorage.setItem('og_minimap_center', JSON.stringify({ lat: center.lat, lng: center.lng }));
+            localStorage.setItem('og_minimap_zoom', zoom);
+            console.log('Minimap view saved:', center, zoom);
+        }
+    }
+
+    // Loads the saved map view from localStorage
+    function loadMapView() {
+        try {
+            const centerStr = localStorage.getItem('og_minimap_center');
+            const zoomStr = localStorage.getItem('og_minimap_zoom');
+            if (centerStr && zoomStr) {
+                const center = JSON.parse(centerStr);
+                const zoom = parseInt(zoomStr, 10);
+                return { center, zoom };
+            }
+        } catch (e) {
+            console.error("Error loading minimap view from localStorage:", e);
+        }
+        return null; // Return null if no saved view exists or an error occurs
+    }
 
     // Injects CSS styles into the document head to style the minimap and its controls
     function injectStyles() {
@@ -36,6 +112,9 @@
                 --light-border: #dee2e6;
                 --dark-border: #495057;
                 --shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+                --status-connected: #28a745; /* Green */
+                --status-disconnected: #dc3545; /* Red */
+                --status-error: #ffc107; /* Yellow for errors */
             }
             [data-theme="dark"] {
                 --primary-color: #00A86B;
@@ -72,15 +151,35 @@
                 height: 100%;
                 border-radius: 12px;
             }
+            #minimapTitle {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                padding: 5px 10px;
+                background: var(--dark-bg);
+                color: var(--dark-text);
+                font-size: 12px;
+                font-weight: bold;
+                text-align: center;
+                z-index: 1002; /* Above map content */
+                border-top-left-radius: 12px;
+                border-top-right-radius: 12px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
             #minimapInfo {
                 position: absolute;
                 bottom: 0;
                 left: 0;
                 right: 0;
                 padding: 8px 12px;
-                background: rgba(0, 0, 0, 0.7);
-                color: var(--dark-text);
-                font-size: 13px;
+                /* --- IMPROVED READABILITY --- */
+                background: rgba(30, 30, 30, 0.95); /* Darker, more opaque background */
+                color: #ffffff; /* Pure white text color */
+                font-size: 14px; /* Slightly larger font */
+                /* --- END IMPROVEMENT --- */
                 white-space: nowrap;
                 text-align: center;
                 z-index: 1001;
@@ -88,10 +187,38 @@
                 text-overflow: ellipsis;
                 border-bottom-left-radius: 12px;
                 border-bottom-right-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between; /* Space between text and status dot */
+            }
+            #minimapInfoText {
+                flex-grow: 1;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                /* --- IMPROVED READABILITY --- */
+                white-space: nowrap;
+                text-align: left; /* Align text to the left */
+                /* --- END IMPROVEMENT --- */
+            }
+             #minimapStatusDot {
+                width: 12px; /* Increased size */
+                height: 12px; /* Increased size */
+                border-radius: 50%;
+                margin-left: 8px;
+                background-color: var(--status-disconnected);
+                /* --- IMPROVED READABILITY --- */
+                border: 1px solid #ffffff; /* White border for contrast */
+                /* --- END IMPROVEMENT --- */
+            }
+            #minimapInfo.connected #minimapStatusDot {
+                 background-color: var(--status-connected);
+            }
+            #minimapInfo.error #minimapStatusDot {
+                 background-color: var(--status-error);
             }
             #minimapLayerControl {
                 position: absolute;
-                top: 10px;
+                top: 30px; /* Adjusted for the title bar */
                 left: 10px;
                 z-index: 1001;
                 display: flex;
@@ -183,7 +310,8 @@
         // Extracts latitude and longitude from the PanoramaIframe's URL
         function _getCurrentPosition() {
             try {
-                const iframe = document.querySelector('#PanoramaIframe');
+                // Use the dynamic function to find the iframe
+                const iframe = findStreetViewIframe();
                 if (iframe && iframe.src) {
                     const url = new URL(iframe.src);
                     const loc = url.searchParams.get('location');
@@ -192,7 +320,9 @@
                         if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
                     }
                 }
-            } catch (e) {}
+            } catch (e) {
+                 console.error("Error in _getCurrentPosition:", e);
+            }
             return null;
         }
         return {
@@ -206,12 +336,18 @@
     // Wrapper function to get the current position using the PositionModule
     function getCurrentPosition() { return PositionModule.getCurrentPosition(); }
 
-    // Creates the main minimap container and its sub-elements (map content, info panel, layer control)
+    // Creates the main minimap container and its sub-elements (map content, info panel, layer control, title)
     function createMinimap() {
         if (document.getElementById('mapWrapper')) return;
         const wrapper = document.createElement('div');
         wrapper.id = 'mapWrapper';
         document.body.appendChild(wrapper);
+
+        // Create title bar element
+        const titleBar = document.createElement('div');
+        titleBar.id = 'minimapTitle';
+        titleBar.textContent = 'Minimap';
+        wrapper.appendChild(titleBar);
 
         const mapContent = document.createElement('div');
         mapContent.id = 'minimapContent';
@@ -219,6 +355,20 @@
 
         const infoPanel = document.createElement('div');
         infoPanel.id = 'minimapInfo';
+        // Initially set to disconnected state
+        infoPanel.classList.add('disconnected');
+
+        // Create a span for the main text content
+        const infoTextSpan = document.createElement('span');
+        infoTextSpan.id = 'minimapInfoText';
+        infoTextSpan.textContent = 'Location: Waiting...';
+        infoPanel.appendChild(infoTextSpan);
+
+        // Create a span for the status indicator dot
+        const statusDot = document.createElement('span');
+        statusDot.id = 'minimapStatusDot';
+        infoPanel.appendChild(statusDot);
+
         wrapper.appendChild(infoPanel);
 
         const layerControl = document.createElement('div');
@@ -240,14 +390,26 @@
             iconAnchor: [9, 9]
         });
 
+        // Attempt to load the saved view
+        const savedView = loadMapView();
+        const initialCenter = savedView ? [savedView.center.lat, savedView.center.lng] : [0, 0];
+        const initialZoom = savedView ? savedView.zoom : 2;
+
         // Initializes the Leaflet map with specific options and sets the initial view
-        minimapInstance = L.map('minimapContent', { attributionControl: false, zoomControl: false, dragging: true, scrollWheelZoom: true, worldCopyJump: true, maxBoundsViscosity: 1.0 }).setView([0, 0], 2);
+        minimapInstance = L.map('minimapContent', { attributionControl: false, zoomControl: false, dragging: true, scrollWheelZoom: true, worldCopyJump: true, maxBoundsViscosity: 1.0 }).setView(initialCenter, initialZoom);
 
         // Event listeners to detect user interaction (dragging, zooming) with the map
         minimapInstance.on('mousedown', () => userInteracting = true);
         minimapInstance.on('mouseup', () => setTimeout(() => userInteracting = false, 100));
         minimapInstance.on('zoomstart', () => userInteracting = true);
         minimapInstance.on('zoomend', () => setTimeout(() => userInteracting = false, 100));
+
+        // Event listener to save the view when the map is moved or zoomed
+        minimapInstance.on('moveend', () => {
+            if (!userInteracting) { // Only save if the user made the change
+                saveMapView();
+            }
+        });
 
         // Defines different tile layers (Standard, Satellite, Topographic) for the minimap
         const layers = {
@@ -289,6 +451,26 @@
     function updateMinimap(position, setView = false) {
         if (!minimapInstance) return;
         lastPosition = position;
+
+        // Update the status indicator to connected
+        const infoPanel = document.getElementById('minimapInfo');
+        if (infoPanel) {
+            infoPanel.classList.remove('disconnected', 'error'); // Remove error state when position updates
+            infoPanel.classList.add('connected');
+            // Clear any pending timeout to reset status
+            if (positionStatusTimeout) {
+                clearTimeout(positionStatusTimeout);
+                positionStatusTimeout = null;
+            }
+            // Set a new timeout to reset status if no update comes soon
+            positionStatusTimeout = setTimeout(() => {
+                if (infoPanel) {
+                     infoPanel.classList.remove('connected');
+                     infoPanel.classList.add('disconnected');
+                }
+            }, 8000); // Reset status after 8 seconds without an update
+        }
+
         if (currentMarker) {
             // Moves existing marker to new position
             currentMarker.setLatLng([position.lat, position.lng]);
@@ -306,21 +488,101 @@
 
     // Fetches and displays location name based on coordinates using OpenStreetMap Nominatim API
     async function updateInfoPanel(position) {
-        const info = document.getElementById('minimapInfo');
-        if (!info) return;
-        let placeName = 'Unknown';
-        try {
-            const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18&addressdetails=1`;
-            const res = await fetch(url);
-            const data = await res.json();
-            if (data && data.address) {
-                const components = [data.address.road, data.address.suburb, data.address.city, data.address.town, data.address.village, data.address.county, data.address.state, data.address.country].filter(Boolean);
-                placeName = [...new Set(components)].join(', ');
+        const infoTextElement = document.getElementById('minimapInfoText');
+        const infoPanel = document.getElementById('minimapInfo'); // For status updates
+        if (!infoTextElement || !infoPanel) return;
+
+        // Debounce the Nominatim request
+        if (nominatimDebounceTimeout) {
+            clearTimeout(nominatimDebounceTimeout);
+        }
+
+        // Function to perform the actual request
+        const performRequest = async () => {
+            let placeName = 'Unknown';
+            let isError = false;
+
+            // Check cache first
+            const cachedKey = `${position.lat.toFixed(6)},${position.lng.toFixed(6)}`;
+            if (locationCache[cachedKey] && isCachedLocationValid(position.lat, position.lng, locationCache[cachedKey].lat, locationCache[cachedKey].lng)) {
+                console.log('Using cached location name for:', cachedKey);
+                placeName = locationCache[cachedKey].name;
+                lastValidPlaceName = placeName;
             } else {
-                 placeName = data.display_name || 'No details found';
+                try {
+                    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18&addressdetails=1`;
+                    const res = await fetch(url);
+                    if (!res.ok) {
+                        throw new Error(`Nominatim API error: ${res.status} ${res.statusText}`);
+                    }
+                    const data = await res.json();
+                    if (data && data.address) {
+                        // Extract country and city/town/village
+                        const country = data.address.country || '';
+                        const city = data.address.city || data.address.town || data.address.village || '';
+
+                        // Construct the place name: Country, City
+                        if (city) {
+                            placeName = `${country}, ${city}`;
+                        } else {
+                            placeName = country;
+                        }
+                        // Update the last valid name if successful
+                        if (placeName !== 'Unknown' && placeName !== 'No details found' && !placeName.includes('Location Name Unavailable')) {
+                             lastValidPlaceName = placeName;
+                             // Cache the new result
+                             locationCache[cachedKey] = {
+                                 lat: position.lat,
+                                 lng: position.lng,
+                                 name: placeName,
+                                 timestamp: Date.now()
+                             };
+                        }
+                    } else {
+                         placeName = data.display_name || 'No details found';
+                         if (placeName !== 'No details found') {
+                              lastValidPlaceName = placeName;
+                              locationCache[cachedKey] = {
+                                 lat: position.lat,
+                                 lng: position.lng,
+                                 name: placeName,
+                                 timestamp: Date.now()
+                             };
+                         }
+                    }
+                    // Reset error count on success
+                    nominatimErrorCount = 0;
+                    if (nominatimErrorResetTimeout) {
+                        clearTimeout(nominatimErrorResetTimeout);
+                        nominatimErrorResetTimeout = null;
+                    }
+                    // Set timeout to reset error count if no more errors occur soon
+                    nominatimErrorResetTimeout = setTimeout(() => {
+                        nominatimErrorCount = 0;
+                    }, NOMINATIM_ERROR_RESET_TIMEOUT);
+
+                } catch (e) {
+                    console.error("Error fetching place name:", e);
+                    isError = true;
+                    // Increment error counter
+                    nominatimErrorCount++;
+                    // Use the last valid name or show unavailable message if threshold is reached
+                    if (nominatimErrorCount >= NOMINATIM_ERROR_THRESHOLD) {
+                        placeName = 'Location Service Unavailable';
+                        infoPanel.classList.remove('connected', 'disconnected');
+                        infoPanel.classList.add('error');
+                    } else {
+                        placeName = lastValidPlaceName !== 'Unknown' ? `${lastValidPlaceName} (Last Known)` : 'Location Name Unavailable';
+                    }
+                }
             }
-        } catch (e) { console.error("Error fetching place name:", e); }
-        info.innerHTML = `Lat: ${position.lat.toFixed(6)} | Lng: ${position.lng.toFixed(6)} | Place: ${placeName}`;
+
+            // Update the text content - ONLY Country and City (or error message)
+            infoTextElement.innerHTML = `Location: ${placeName}`;
+        };
+
+        // Set the timeout to execute the request after a delay (e.g., 2 seconds)
+        nominatimDebounceTimeout = setTimeout(performRequest, 2000);
     }
 
     // Starts a recurring interval to check and update the player's position on the minimap
@@ -381,6 +643,10 @@
                 if (!isDragging) {
                     const map = document.getElementById('mapWrapper');
                     if (map) {
+                        if (map.classList.contains('visible')) {
+                            // --- SAVE VIEW WHEN CLOSING ---
+                            saveMapView();
+                        }
                         map.classList.toggle('visible'); // Toggles 'visible' class for CSS transitions
                         if (map.classList.contains('visible')) {
                             // Invalidates map size and centers view if minimap becomes visible
@@ -419,7 +685,8 @@
     // If removed, it recreates them to ensure persistence
     function setupObserver() {
         const observer = new MutationObserver(() => {
-            const panoramaExists = document.querySelector('#PanoramaIframe');
+            // Use the dynamic function to find the iframe
+            const panoramaExists = findStreetViewIframe();
             if (panoramaExists) {
                 // Recreate button if it's missing
                 if (!document.getElementById('buttonWrapper')) {
@@ -437,10 +704,11 @@
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    // Periodically checks for the existence of the #PanoramaIframe
+    // Periodically checks for the existence of the Street View iframe
     // Once found, it clears the interval and calls the main initialization function
     const checkInterval = setInterval(() => {
-        if (document.querySelector('#PanoramaIframe')) {
+        // Use the dynamic function to find the iframe
+        if (findStreetViewIframe()) {
             clearInterval(checkInterval); // Stops checking once iframe is found
             init(); // Initializes the script
         }
